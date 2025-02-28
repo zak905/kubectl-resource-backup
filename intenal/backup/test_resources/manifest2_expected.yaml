@@ -26,6 +26,7 @@ spec:
         - containerPort: 80
           name: http
           protocol: TCP
+      resources: {}
       terminationMessagePath: /dev/termination-log
       terminationMessagePolicy: File
       volumeMounts:
@@ -39,6 +40,7 @@ spec:
   priority: 0
   restartPolicy: Always
   schedulerName: default-scheduler
+  securityContext: {}
   serviceAccount: default
   serviceAccountName: default
   terminationGracePeriodSeconds: 30

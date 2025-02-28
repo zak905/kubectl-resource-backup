@@ -32,7 +32,7 @@ func BackupResource(resourceName, namespace, directory string) error {
 		return fmt.Errorf("error creating discovery client: %w", err)
 	}
 
-	_, rl, err := discoveryClient.ServerGroupsAndResources()
+	_, sgr, err := discoveryClient.ServerGroupsAndResources()
 	if err != nil {
 		return fmt.Errorf("error discovering api server resources: %w", err)
 	}
@@ -41,9 +41,9 @@ func BackupResource(resourceName, namespace, directory string) error {
 	var found bool
 	var namespaced bool
 
-	for _, resource := range rl {
-		for _, rr := range resource.APIResources {
-			if rr.SingularName == resourceName {
+	for _, resource := range sgr {
+		for _, ar := range resource.APIResources {
+			if ar.SingularName == resourceName {
 				var version string
 				var group string
 				groupVersion := strings.Split(resource.GroupVersion, "/")
@@ -53,8 +53,8 @@ func BackupResource(resourceName, namespace, directory string) error {
 					group = groupVersion[0]
 					version = groupVersion[1]
 				}
-				grv = schema.GroupVersionResource{Group: group, Version: version, Resource: rr.Name}
-				namespaced = rr.Namespaced
+				grv = schema.GroupVersionResource{Group: group, Version: version, Resource: ar.Name}
+				namespaced = ar.Namespaced
 				found = true
 				break
 			}
@@ -81,9 +81,9 @@ func BackupResource(resourceName, namespace, directory string) error {
 		obj := item.Object
 		removeStatus(obj)
 		removeServerGeneratedFields(obj)
-		specs, ok := obj["specs"].(map[string]interface{})
+		specs, ok := obj["spec"].(map[string]interface{})
 		if ok {
-			removeNullsAndEmptyValues(specs)
+			removeNullValues(specs)
 		}
 
 		fileName := path.Join(directory, item.GetName()+".yaml")
@@ -128,17 +128,20 @@ func removeStatus(obj map[string]interface{}) {
 	delete(obj, "status")
 }
 
-func removeNullsAndEmptyValues(root map[string]interface{}) {
+func removeNullValues(root map[string]interface{}) {
 	for k, v := range root {
-		if k == "emptyDir" {
-			continue
-		}
 		obj, ok := v.(map[string]interface{})
 		if ok {
-			if len(obj) == 0 {
+			// if len(obj) == 0 {
+			// we can try to remove fields that have empty object as a value
+			// like securityContext: {}
+			// but there are always exceptions like emptyDir: {}
+			// it's difficult to know all of them in advance
+			// e.g a cluster may contain custom CRDs
+			if obj == nil {
 				delete(root, k)
 			} else {
-				removeNullsAndEmptyValues(obj)
+				removeNullValues(obj)
 			}
 			continue
 		}
@@ -151,7 +154,7 @@ func removeNullsAndEmptyValues(root map[string]interface{}) {
 				for _, vi := range array {
 					arrayItem, ok := vi.(map[string]interface{})
 					if ok {
-						removeNullsAndEmptyValues(arrayItem)
+						removeNullValues(arrayItem)
 					}
 				}
 			}
