@@ -5,28 +5,28 @@ kubectl plugin that backups Kubernetes objects (including CRDs) to the local fil
 - the server generated fields from the object metadata.
 - any field with a `null` value.
 
-The plugin aims to make the saved objects look like the original creation request. However, the plugin does not remove the fields that has a default value (unlike the neat [plugin](https://github.com/itaysk/kubectl-neat)) because it's not possible to make a distinction between a value set by a creation/update request and a value set by a controller or mutating admission webhook.
+The plugin aims to make the saved objects look like the original creation request. However, the plugin does not remove the fields that has a default value (unlike the neat [plugin](https://github.com/itaysk/kubectl-neat)) because it's not possible to make a distinction between a value set by a creation/update request and a value set by a controller or a mutating admission webhook. If we take the deployment of an ingress-ngix below as an example, the fields surrounded with ascii boxes will be removed when using this plugin.
 
-<pre>
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
     deployment.kubernetes.io/revision: "1"
-  <div style="background-color:red;color:white">
-  creationTimestamp: "2023-10-01T15:45:42Z"
-  generation: 1
-  </div>
+#removed ----------------------------------------------------|
+  creationTimestamp: "2023-10-01T15:45:42Z"                 #|
+  generation: 1                                             #|
+#------------------------------------------------------------|
   labels:
     app.kubernetes.io/component: controller
     app.kubernetes.io/instance: ingress-nginx
     app.kubernetes.io/name: ingress-nginx
   name: ingress-nginx-controller
   namespace: ingress-nginx
-  <div style="background-color:red;color:white">
-  resourceVersion: "8039704"
-  uid: 63e16d11-a32e-498a-a8d8-f1b9df9d15a0
-  </div>
+#removed ----------------------------------------------------|
+  resourceVersion: "8039704"                                #|
+  uid: 63e16d11-a32e-498a-a8d8-f1b9df9d15a0                 #|
+#------------------------------------------------------------|
 spec:
   progressDeadlineSeconds: 600
   replicas: 1
@@ -43,9 +43,9 @@ spec:
     type: RollingUpdate
   template:
     metadata:
- <div style="background-color:red;color:white">
-      creationTimestamp: null
- </div>
+#removed ----------------------------------------------------|
+      creationTimestamp: null                               #|
+#------------------------------------------------------------|
       labels:
         app.kubernetes.io/component: controller
         app.kubernetes.io/instance: ingress-nginx
@@ -154,29 +154,28 @@ spec:
         secret:
           defaultMode: 420
           secretName: ingress-nginx-admission
-<div style="background-color:red;color:white">
-status:
-  availableReplicas: 1
-  conditions:
-  - lastTransitionTime: "2023-10-01T15:45:54Z"
-    lastUpdateTime: "2023-10-01T15:45:54Z"
-    message: Deployment has minimum availability.
-    reason: MinimumReplicasAvailable
-    status: "True"
-    type: Available
-  - lastTransitionTime: "2023-10-01T15:45:54Z"
-    lastUpdateTime: "2023-10-01T15:49:21Z"
-    message: ReplicaSet "ingress-nginx-controller-7799c6795f" has successfully progressed.
-    reason: NewReplicaSetAvailable
-    status: "True"
-    type: Progressing
-  observedGeneration: 1
-  readyReplicas: 1
-  replicas: 1
-  updatedReplicas: 1
-</div>
-</pre>
-
+#removed--------------------------------------------------------------------------------------------------|
+status:                                                                                                   #|
+  availableReplicas: 1                                                                                    #|
+  conditions:                                                                                             #|
+  - lastTransitionTime: "2023-10-01T15:45:54Z"                                                            #|
+    lastUpdateTime: "2023-10-01T15:45:54Z"                                                                #|
+    message: Deployment has minimum availability.                                                         #|
+    reason: MinimumReplicasAvailable                                                                      #|
+    status: "True"                                                                                        #|
+    type: Available                                                                                       #|
+  - lastTransitionTime: "2023-10-01T15:45:54Z"                                                            #|
+    lastUpdateTime: "2023-10-01T15:49:21Z"                                                                #|
+    message: ReplicaSet "ingress-nginx-controller-7799c6795f" has successfully progressed.                #|
+    reason: NewReplicaSetAvailable                                                                        #|
+    status: "True"                                                                                        #|
+    type: Progressing                                                                                     #|
+  observedGeneration: 1                                                                                   #|
+  readyReplicas: 1                                                                                        #|
+  replicas: 1                                                                                             #|
+  updatedReplicas: 1                                                                                      #|
+#---------------------------------------------------------------------------------------------------------|
+```
 
 # Usage:
 
@@ -198,6 +197,12 @@ Args:
 For example, assuming that the namespace `ns` contains three deployments: `deployment1`, `deployment2`, `deployment3`.
 
 Running `kubectl backup deployment -n ns` would result in the creation of 3 yaml files in the current directory with the name of the deployments: `deployment1_deployment_ns.yaml`, `deployment2_deployment_ns.yaml`, `deployment3_deployment_ns.yaml`
+
+# Installation
+
+  ```sh
+  kubectl krew install backup
+  ```
 
 # Naming
 
