@@ -1,11 +1,11 @@
 # Backup 
 
-kubectl plugin that backups Kubernetes objects (including CRDs) to the local file system. Before saving any resource, the plugin does some additional processing to remove:
+kubectl plugin that backs up Kubernetes objects (including CRDs) to the local file system. Before saving any resource, the plugin does some additional processing to remove:
 - the status stanza if the object has any.
 - the server generated fields from the object metadata.
 - any field with a `null` value.
 
-The plugin aims to make the saved objects look like the original creation request. However, the plugin does not remove the fields that has a default value (unlike the neat [plugin](https://github.com/itaysk/kubectl-neat)) because it's not possible to make a distinction between a value set by a creation/update request and a value set by a controller or a mutating admission webhook. If we take the deployment of an ingress-ngix below as an example, the fields surrounded with ascii boxes will be removed when using this plugin.
+The plugin aims to make the saved objects look like the original creation request. However, the plugin does not remove the fields that has a default value (unlike the neat [plugin](https://github.com/itaysk/kubectl-neat)) because it's not possible to make a distinction between a value set by a creation/update request and a value set by a controller or a mutating admission webhook. If we take the deployment of an ingress-ngix below as an example, the fields surrounded with ascii boxes will be removed from the saved objects.
 
 ```yaml
 apiVersion: apps/v1
@@ -181,7 +181,7 @@ status:                                                                         
   ```sh
   kubectl krew install backup
   ```
-  
+
 # Usage:
 
 ```
