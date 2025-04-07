@@ -86,7 +86,12 @@ func BackupResource(resourceName, namespace, directory string) error {
 			removeNullValues(specs)
 		}
 
-		fileName := path.Join(directory, item.GetName()+".yaml")
+		var fileName string
+		if namespaced {
+			fileName = path.Join(directory, fmt.Sprintf("%s_%s_%s.yaml", item.GetName(), resourceName, namespace))
+		} else {
+			fileName = path.Join(directory, fmt.Sprintf("%s_%s.yaml", item.GetName(), resourceName))
+		}
 
 		f, err := os.OpenFile(fileName,
 			os.O_RDWR|os.O_CREATE, 0644)
