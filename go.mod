@@ -1,4 +1,4 @@
-module github.com/zak905/kubectl-backup
+module github.com/zak905/kubectl-resource-backup
 
 go 1.23.6
 

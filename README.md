@@ -1,4 +1,4 @@
-# Backup 
+# resource-backup
 
 kubectl plugin that backs up Kubernetes objects (including CRDs) to the local file system. Before saving any resource, the plugin does some additional processing to remove:
 - the status stanza if the object has any.

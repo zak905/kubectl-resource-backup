@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/zak905/kubectl-backup/intenal/backup"
+	"github.com/zak905/kubectl-resource-backup/internal/backup"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 var Version = "unknown"
 
 func main() {
-	kingpin.CommandLine.Name = "kubectl backup"
+	kingpin.CommandLine.Name = "kubectl resource-backup"
 	kingpin.Version(Version)
 	kingpin.Parse()
 
