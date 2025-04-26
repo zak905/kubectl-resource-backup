@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-go@v5
       - name: unit tests
         run: |
+          go mod tidy
           go test ./...
       - name: lint
         uses: golangci/golangci-lint-action@v7
