@@ -47,7 +47,7 @@ jobs:
 
 
             #update krew index fork
-            git clone https://github.com/zak905/krew-index.git
+            git clone git@github.com:zak905/krew-index.git
             cp resource-backup.yaml krew-index/plugins/
             cd krew-index
             export BRANCH_NAME=resource_backup_version_$TAG
