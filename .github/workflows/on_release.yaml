@@ -68,5 +68,5 @@ jobs:
             | jq .html_url)
 
             #output PR URL to action to summary
-            echo "PR: [$PR_UR]($PR_URL)"" >> $GITHUB_STEP_SUMMARY
+            echo "PR: [$PR_UR]($PR_URL)" >> $GITHUB_STEP_SUMMARY
 
