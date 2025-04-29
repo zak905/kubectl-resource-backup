@@ -31,33 +31,33 @@ spec:
         os: darwin
         arch: arm64
     uri: https://github.com/zak905/kubectl-resource-backup/releases/download/${TAG}/kubectl-resource-backup_darwin_arm64.tar.gz
-    sha: ${DARWIN_ARM64_SHA256}
+    sha256: ${DARWIN_ARM64_SHA256}
     bin: kubectl-resource-backup
   - selector:
       matchLabels:
         os: linux
         arch: amd64
     uri: https://github.com/zak905/kubectl-resource-backup/releases/download/${TAG}/kubectl-resource-backup_linux_amd64.tar.gz
-    sha: ${LINUX_AMD64_SHA256}
+    sha256: ${LINUX_AMD64_SHA256}
     bin: kubectl-resource-backup
   - selector:
       matchLabels:
         os: linux
         arch: arm64
     uri: https://github.com/zak905/kubectl-resource-backup/releases/download/${TAG}/kubectl-resource-backup_linux_arm64.tar.gz
-    sha: ${LINUX_ARM64_SHA256}
+    sha256: ${LINUX_ARM64_SHA256}
     bin: kubectl-resource-backup
   - selector:
       matchLabels:
         os: windows
         arch: amd64
     uri: https://github.com/zak905/kubectl-resource-backup/releases/download/${TAG}/kubectl-resource-backup_windows_amd64.tar.gz
-    sha: ${WINDOWS_AMD64_SHA256}
+    sha256: ${WINDOWS_AMD64_SHA256}
     bin: kubectl-resource-backup.exe
   - selector:
       matchLabels:
         os: windows
         arch: arm64
     uri: https://github.com/zak905/kubectl-resource-backup/releases/download/${TAG}/kubectl-resource-backup_windows_arm64.tar.gz
-    sha: ${WINDOWS_ARM64_SHA256}
+    sha256: ${WINDOWS_ARM64_SHA256}
     bin: kubectl-resource-backup.exe
