@@ -185,17 +185,19 @@ status:                                                                         
 # Usage:
 
 ```
-usage: kubectl backup [<flags>] <resource>
+usage: kubectl resource-backup [<flags>] <kind>
 
 
 Flags:
       --[no-]help            Show context-sensitive help (also try --help-long and --help-man).
   -n, --namespace="default"  if the resource is namespaced, this flag sets the namespace scope
       --dir="."              the directory where the resources will be saved
+      --[no-]zip             generates a zip archive containing the saved resources
       --[no-]version         Show application version.
 
 Args:
-  <resource>  the Kubernetes resource to backup. e.g deployment, service,...
+  <kind>  the Kubernetes resource kind to backup in lower case. e.g issuer, deployment, service...
+
 
 ```
 
@@ -212,5 +214,4 @@ if the resource is not namespaced the namespace is omitted.
 
 # Planned features: 
 
-- allowing the generation of archives (zip/tar)
 - adding the all namespaces flag `-all` for saving a resource from all namespaces
