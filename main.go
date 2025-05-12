@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	resourceArg   = kingpin.Arg("resource", "the Kubernetes resource to backup. e.g deployment, service,...").Required().String()
+	resourceArg   = kingpin.Arg("kind", "the Kubernetes resource kind to backup in lower case. e.g issuer, deployment, service...").Required().String()
 	namespaceFlag = kingpin.Flag("namespace", "if the resource is namespaced, this flag sets the namespace scope").Short('n').Default("default").String()
 	dirFlag       = kingpin.Flag("dir", "the directory where the resources will be saved").Default(".").String()
+	archive       = kingpin.Flag("zip", "generates a zip archive containing the saved resources").Default("false").Bool()
 )
 
 var Version = "unknown"
@@ -34,7 +35,7 @@ func main() {
 		log.Fatalf("%s is not a directory", directory)
 	}
 
-	err = backup.BackupResource(resource, namespace, directory)
+	err = backup.BackupResource(resource, namespace, directory, *archive)
 	if err != nil {
 		log.Fatalf("backup failed: %s", err.Error())
 	}

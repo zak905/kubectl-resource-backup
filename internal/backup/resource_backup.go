@@ -1,8 +1,10 @@
 package backup
 
 import (
+	"archive/zip"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path"
@@ -13,21 +15,45 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func BackupResource(resourceName, namespace, directory string) error {
-	config, err := clientcmd.BuildConfigFromKubeconfigGetter("", clientcmd.NewDefaultClientConfigLoadingRules().Load)
+type getConfigFunc func() (*rest.Config, error)
+type getDynamicClientFunc func(*rest.Config) (dynamic.Interface, error)
+type getDiscoveryClientFunc func(*rest.Config) (discovery.DiscoveryInterface, error)
+type openFileFunc func(fileAbsolutePath string) (io.WriteCloser, error)
+
+var defaultGetConfig getConfigFunc = func() (*rest.Config, error) {
+	return clientcmd.BuildConfigFromKubeconfigGetter("", clientcmd.NewDefaultClientConfigLoadingRules().Load)
+}
+
+var defaultGetDynamicClientFunc getDynamicClientFunc = func(config *rest.Config) (dynamic.Interface, error) {
+	return dynamic.NewForConfig(config)
+}
+
+var defaultGetDiscoveryClientFunc getDiscoveryClientFunc = func(config *rest.Config) (discovery.DiscoveryInterface, error) {
+	return discovery.NewDiscoveryClientForConfig(config)
+}
+
+var defaultOpenFileFunc openFileFunc = func(fileAbsolutePath string) (io.WriteCloser, error) {
+	return os.OpenFile(fileAbsolutePath,
+		os.O_RDWR|os.O_CREATE, 0644)
+}
+
+func BackupResource(resourceKind, namespace, directory string, archive bool) error {
+	return backupResource(resourceKind, namespace, directory, archive, defaultGetConfig,
+		defaultGetDynamicClientFunc, defaultGetDiscoveryClientFunc, defaultOpenFileFunc)
+}
+
+func backupResource(resourceKind, namespace, directory string, archive bool, getConfigFunc getConfigFunc,
+	getDynamicClientFunc getDynamicClientFunc, getDiscoveryClient getDiscoveryClientFunc, openfileFunc openFileFunc) error {
+	config, err := getConfigFunc()
 	if err != nil {
 		return fmt.Errorf("error creating k8 client config: %w", err)
 	}
 
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("error creating k8 client: %w", err)
-	}
-
-	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
+	discoveryClient, err := getDiscoveryClient(config)
 	if err != nil {
 		return fmt.Errorf("error creating discovery client: %w", err)
 	}
@@ -43,7 +69,7 @@ func BackupResource(resourceName, namespace, directory string) error {
 
 	for _, resource := range sgr {
 		for _, ar := range resource.APIResources {
-			if ar.SingularName == resourceName {
+			if ar.SingularName == resourceKind {
 				var version string
 				var group string
 				groupVersion := strings.Split(resource.GroupVersion, "/")
@@ -65,16 +91,47 @@ func BackupResource(resourceName, namespace, directory string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("resource with name %s not found", resourceName)
+		return fmt.Errorf("resource with name %s not found", resourceKind)
 	}
 
 	if !namespaced {
 		namespace = v1.NamespaceNone
 	}
 
+	client, err := getDynamicClientFunc(config)
+	if err != nil {
+		return fmt.Errorf("error creating k8 client: %w", err)
+	}
+
 	resources, err := client.Resource(grv).Namespace(namespace).List(context.Background(), v1.ListOptions{})
 	if err != nil {
-		return fmt.Errorf("error list resource %s: %w", resourceName, err)
+		return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
+	}
+
+	var zipWriter *zip.Writer
+
+	if archive {
+		var archiveFileName string
+		if namespaced {
+			archiveFileName = fmt.Sprintf("%s_%s.zip", resourceKind, namespace)
+		} else {
+			archiveFileName = fmt.Sprintf("%s.zip", resourceKind)
+		}
+		archiveAbsolutePath := path.Join(directory, archiveFileName)
+
+		archiveFile, err := openfileFunc(archiveAbsolutePath)
+		if err != nil {
+			return fmt.Errorf("error creating archive file %s: %w", archiveFileName, err)
+		}
+		zipWriter = zip.NewWriter(archiveFile)
+		defer func() {
+			if err := zipWriter.Close(); err != nil {
+				log.Printf("error closing zip writer: %s", err.Error())
+			}
+			if err := archiveFile.Close(); err != nil {
+				log.Printf("error closing zip file: %s", err.Error())
+			}
+		}()
 	}
 
 	for _, item := range resources.Items {
@@ -88,24 +145,36 @@ func BackupResource(resourceName, namespace, directory string) error {
 
 		var fileName string
 		if namespaced {
-			fileName = path.Join(directory, fmt.Sprintf("%s_%s_%s.yaml", item.GetName(), resourceName, namespace))
+			fileName = fmt.Sprintf("%s_%s_%s.yaml", item.GetName(), resourceKind, namespace)
 		} else {
-			fileName = path.Join(directory, fmt.Sprintf("%s_%s.yaml", item.GetName(), resourceName))
+			fileName = fmt.Sprintf("%s_%s.yaml", item.GetName(), resourceKind)
 		}
 
-		f, err := os.OpenFile(fileName,
-			os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to save %s %s: %w", resourceName, item.GetName(), err)
-		}
+		fileAbsolutePath := path.Join(directory, fileName)
 
-		defer func() {
-			if err := f.Close(); err != nil {
-				log.Printf("error closing file %s: %s", fileName, err.Error())
+		var f io.WriteCloser
+		var currentZipWriter io.Writer
+		var enc *yaml.Encoder
+
+		if archive {
+			currentZipWriter, err = zipWriter.Create(fileName)
+			if err != nil {
+				return fmt.Errorf("failed to add file %s to zip archive: %w", fileName, err)
 			}
-		}()
+			enc = yaml.NewEncoder(currentZipWriter)
+		} else {
+			f, err = openfileFunc(fileAbsolutePath)
+			if err != nil {
+				return fmt.Errorf("failed to create file %s: %w", fileName, err)
+			}
+			enc = yaml.NewEncoder(f)
+			defer func() {
+				if err := f.Close(); err != nil {
+					log.Printf("error closing file %s: %s", fileAbsolutePath, err.Error())
+				}
+			}()
+		}
 
-		enc := yaml.NewEncoder(f)
 		enc.SetIndent(2)
 
 		err = enc.Encode(obj)
