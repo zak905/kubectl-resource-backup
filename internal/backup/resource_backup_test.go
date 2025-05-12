@@ -481,7 +481,9 @@ func TestBackupResource_WithArchive(t *testing.T) {
 				assert.NoError(t, err)
 
 				t.Cleanup(func() {
-					r.Close()
+					if err := r.Close(); err != nil {
+						fmt.Println(err.Error())
+					}
 				})
 
 				for _, actualResourceFile := range r.File {
