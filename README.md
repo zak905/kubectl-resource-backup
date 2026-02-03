@@ -179,7 +179,7 @@ status:                                                                         
 # Installation
 
   ```sh
-  kubectl krew install backup
+  kubectl krew install resource-backup
   ```
 
 # Usage:
@@ -203,7 +203,7 @@ Args:
 
 For example, assuming that the namespace `ns` contains three deployments: `deployment1`, `deployment2`, `deployment3`.
 
-Running `kubectl backup deployment -n ns` would result in the creation of 3 yaml files in the current directory with the name of the deployments: `deployment1_deployment_ns.yaml`, `deployment2_deployment_ns.yaml`, `deployment3_deployment_ns.yaml`
+Running `kubectl resource-backup deployment -n ns` would result in the creation of 3 yaml files in the current directory with the name of the deployments: `deployment1_deployment_ns.yaml`, `deployment2_deployment_ns.yaml`, `deployment3_deployment_ns.yaml`
 
 # Naming
 
