@@ -38,7 +38,7 @@ func main() {
 		log.Fatalf("%s is not a directory", directory)
 	}
 
-	err = backup.BackupResource(resource, namespace, directory, *archive, *all)
+	err = backup.Do(resource, namespace, directory, *archive, *all)
 	if err != nil {
 		log.Fatalf("backup failed: %s", err.Error())
 	}

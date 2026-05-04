@@ -3,6 +3,7 @@ package backup
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -46,7 +47,7 @@ var defaultOpenFileFunc openFileFunc = func(fileAbsolutePath string) (io.WriteCl
 		os.O_RDWR|os.O_CREATE, 0o644)
 }
 
-func BackupResource(resourceKind, namespace, directory string, archive, all bool) error {
+func Do(resourceKind, namespace, directory string, archive, all bool) error {
 	return backupResource(resourceKind, namespace, directory, archive, all, defaultGetConfig,
 		defaultGetDynamicClientFunc, defaultGetDiscoveryClientFunc, defaultOpenFileFunc)
 }
@@ -75,21 +76,22 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 
 	for _, resource := range sgr {
 		for _, ar := range resource.APIResources {
-			if ar.SingularName == resourceKind {
-				var version string
-				var group string
-				groupVersion := strings.Split(resource.GroupVersion, "/")
-				if len(groupVersion) == 1 {
-					version = groupVersion[0]
-				} else {
-					group = groupVersion[0]
-					version = groupVersion[1]
-				}
-				grv = schema.GroupVersionResource{Group: group, Version: version, Resource: ar.Name}
-				namespaced = ar.Namespaced
-				found = true
-				break
+			if ar.SingularName != resourceKind {
+				continue
 			}
+			var version string
+			var group string
+			groupVersion := strings.Split(resource.GroupVersion, "/")
+			if len(groupVersion) == 1 {
+				version = groupVersion[0]
+			} else {
+				group = groupVersion[0]
+				version = groupVersion[1]
+			}
+			grv = schema.GroupVersionResource{Group: group, Version: version, Resource: ar.Name}
+			namespaced = ar.Namespaced
+			found = true
+			break
 		}
 		if found {
 			break
@@ -142,7 +144,7 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 
 	if archive {
 		var archiveFileName string
-		if namespaced {
+		if namespaced && !all {
 			archiveFileName = fmt.Sprintf("%s_%s.zip", resourceKind, namespace)
 		} else {
 			archiveFileName = fmt.Sprintf("%s.zip", resourceKind)
@@ -167,7 +169,9 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 	for _, item := range resources.Items {
 		obj := item.Object
 		removeStatus(obj)
-		removeServerGeneratedFields(obj)
+		if err := removeServerGeneratedFields(obj); err != nil {
+			return fmt.Errorf("failed removing server generated fields: %w", err)
+		}
 		specs, ok := obj["spec"].(map[string]interface{})
 		if ok {
 			removeNullValues(specs)
@@ -198,11 +202,6 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 				return fmt.Errorf("failed to create file %s: %w", fileName, err)
 			}
 			enc = yaml.NewEncoder(f)
-			defer func() {
-				if err := f.Close(); err != nil {
-					log.Printf("error closing file %s: %s", fileAbsolutePath, err.Error())
-				}
-			}()
 		}
 
 		enc.SetIndent(2)
@@ -211,13 +210,21 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 		if err != nil {
 			return fmt.Errorf("error encoding file: %w", err)
 		}
+		if f != nil {
+			if err := f.Close(); err != nil {
+				log.Printf("error closing file %s: %s", fileAbsolutePath, err.Error())
+			}
+		}
 	}
 
 	return nil
 }
 
-func removeServerGeneratedFields(obj map[string]interface{}) {
-	metadata := obj["metadata"].(map[string]interface{})
+func removeServerGeneratedFields(obj map[string]interface{}) error {
+	metadata, ok := obj["metadata"].(map[string]interface{})
+	if !ok {
+		return errors.New("failed extracting metadata from object")
+	}
 	delete(metadata, "selfLink")
 	delete(metadata, "uid")
 	delete(metadata, "resourceVersion")
@@ -226,6 +233,7 @@ func removeServerGeneratedFields(obj map[string]interface{}) {
 	delete(metadata, "deletionTimestamp")
 	delete(metadata, "deletionGracePeriodSeconds")
 	delete(metadata, "managedFields")
+	return nil
 }
 
 func removeStatus(obj map[string]interface{}) {
