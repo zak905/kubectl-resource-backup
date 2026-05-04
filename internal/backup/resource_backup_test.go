@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,8 +39,10 @@ const (
 	testNamespace             = "namespace"
 )
 
-type getDiscoveryClientFuncFactory func(namespaced bool) getDiscoveryClientFunc
-type getDynamicClientFuncFactory func(...runtime.Object) getDynamicClientFunc
+type (
+	getDiscoveryClientFuncFactory func(namespaced bool) getDiscoveryClientFunc
+	getDynamicClientFuncFactory   func(...runtime.Object) getDynamicClientFunc
+)
 
 var (
 	globalObj = &unstructured.Unstructured{
@@ -70,13 +73,24 @@ var (
 		},
 	}
 
+	namespace1 = &corev1.Namespace{ObjectMeta: v1.ObjectMeta{Name: "ns1"}}
+	namespace2 = &corev1.Namespace{ObjectMeta: v1.ObjectMeta{Name: "ns2"}}
+
 	obj = globalObj.DeepCopy()
-	// add namespace
+	// add namespace.
 	_ = unstructured.SetNestedField(obj.Object, testNamespace, "metadata", "namespace")
 
 	obj2 = obj.DeepCopy()
-	// add namespace
+	// add namespace.
 	_ = unstructured.SetNestedField(obj2.Object, testResourceName2, "metadata", "name")
+
+	obj1WithNamespace1 = obj.DeepCopy()
+	// add namespace.
+	_ = unstructured.SetNestedField(obj1WithNamespace1.Object, namespace1.GetName(), "metadata", "namespace")
+
+	obj1WithNamespace2 = obj.DeepCopy()
+	// add namespace.
+	_ = unstructured.SetNestedField(obj1WithNamespace2.Object, namespace2.GetName(), "metadata", "namespace")
 
 	globalObjAfterBackup = &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -97,6 +111,14 @@ var (
 	objAfterBackup2 = objAfterBackup.DeepCopy()
 	_               = unstructured.SetNestedField(objAfterBackup2.Object, testResourceName2, "metadata", "name")
 
+	obj1WithNamespace1AfterBackup = objAfterBackup.DeepCopy()
+	// add namespace.
+	_ = unstructured.SetNestedField(obj1WithNamespace1AfterBackup.Object, namespace1.GetName(), "metadata", "namespace")
+
+	obj1WithNamespace2AfterBackup = objAfterBackup.DeepCopy()
+	// add namespace.
+	_ = unstructured.SetNestedField(obj1WithNamespace2AfterBackup.Object, namespace2.GetName(), "metadata", "namespace")
+
 	okGetConfig getConfigFunc = func() (*rest.Config, error) {
 		return nil, nil
 	}
@@ -105,8 +127,10 @@ var (
 		return func(_ *rest.Config) (dynamic.Interface, error) {
 			dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 				map[schema.GroupVersionResource]string{
-					{Group: testResourceGroup,
-						Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
+					{
+						Group:   testResourceGroup,
+						Version: testResourceVersion, Resource: testResourceKindPlural,
+					}: testResourceKindList,
 				},
 				objects...,
 			)
@@ -180,6 +204,7 @@ func TestRemoveEmptyFields(t *testing.T) {
 type args struct {
 	resourceKind                  string
 	namespace                     string
+	all                           bool
 	getConfigFunc                 getConfigFunc
 	getDynamicClientFunc          getDynamicClientFuncFactory
 	getDiscoveryClientFuncFactory getDiscoveryClientFuncFactory
@@ -211,8 +236,8 @@ func TestBackupResource(t *testing.T) {
 			name: "error getting discovery client",
 			args: args{
 				getConfigFunc: okGetConfig,
-				getDiscoveryClientFuncFactory: func(namespaced bool) getDiscoveryClientFunc {
-					return func(c *rest.Config) (discovery.DiscoveryInterface, error) {
+				getDiscoveryClientFuncFactory: func(_ bool) getDiscoveryClientFunc {
+					return func(_ *rest.Config) (discovery.DiscoveryInterface, error) {
 						return nil, errOp
 					}
 				},
@@ -225,8 +250,8 @@ func TestBackupResource(t *testing.T) {
 			args: args{
 				resourceKind:  testResourceKindLowerCase,
 				getConfigFunc: okGetConfig,
-				getDiscoveryClientFuncFactory: func(namespaced bool) getDiscoveryClientFunc {
-					return func(c *rest.Config) (discovery.DiscoveryInterface, error) {
+				getDiscoveryClientFuncFactory: func(_ bool) getDiscoveryClientFunc {
+					return func(_ *rest.Config) (discovery.DiscoveryInterface, error) {
 						clientSet := fakek8.NewClientset()
 						discoveryClient := clientSet.Discovery().(*fakediscovery.FakeDiscovery)
 
@@ -246,7 +271,7 @@ func TestBackupResource(t *testing.T) {
 			args: args{
 				resourceKind:  testResourceKindLowerCase,
 				getConfigFunc: okGetConfig,
-				getDiscoveryClientFuncFactory: func(namespaced bool) getDiscoveryClientFunc {
+				getDiscoveryClientFuncFactory: func(_ bool) getDiscoveryClientFunc {
 					return func(c *rest.Config) (discovery.DiscoveryInterface, error) {
 						clientSet := fakek8.NewClientset()
 						discoveryClient := clientSet.Discovery().(*fakediscovery.FakeDiscovery)
@@ -285,8 +310,10 @@ func TestBackupResource(t *testing.T) {
 					return func(c *rest.Config) (dynamic.Interface, error) {
 						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 							map[schema.GroupVersionResource]string{
-								{Group: testResourceGroup,
-									Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
+								{
+									Group:   testResourceGroup,
+									Version: testResourceVersion, Resource: testResourceKindPlural,
+								}: testResourceKindList,
 							},
 						)
 						dynamicClient.PrependReactor("*", "*", func(action kubetesting.Action,
@@ -358,6 +385,91 @@ func TestBackupResource(t *testing.T) {
 			listResult: []runtime.Object{obj, obj2},
 			expected:   []*unstructured.Unstructured{objAfterBackup, objAfterBackup2},
 		},
+		{
+			name: "error listing namespaces with all flag",
+			args: args{
+				resourceKind:                  testResourceKindLowerCase,
+				namespace:                     testNamespace,
+				all:                           true,
+				getConfigFunc:                 okGetConfig,
+				getDiscoveryClientFuncFactory: okGetDiscoveryFuncFactory,
+				getDynamicClientFunc: func(o ...runtime.Object) getDynamicClientFunc {
+					return func(_ *rest.Config) (dynamic.Interface, error) {
+						scheme := runtime.NewScheme()
+						_ = corev1.AddToScheme(scheme)
+						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(scheme,
+							map[schema.GroupVersionResource]string{
+								{Group: testResourceGroup, Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
+								{Group: "", Version: "v1", Resource: "Namespace"}:                                          "NamespaceList",
+							},
+						)
+						dynamicClient.PrependReactor("*", "*", func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
+							return true, nil, errOp
+						})
+						return dynamicClient, nil
+					}
+				},
+			},
+			wantErr: true,
+			errMsg:  "error listing namespaces: something happened",
+		},
+		{
+			name: "error listing resources in namespace with all flag",
+			args: args{
+				resourceKind:                  testResourceKindLowerCase,
+				namespace:                     testNamespace,
+				all:                           true,
+				getConfigFunc:                 okGetConfig,
+				getDiscoveryClientFuncFactory: okGetDiscoveryFuncFactory,
+				getDynamicClientFunc: func(o ...runtime.Object) getDynamicClientFunc {
+					return func(_ *rest.Config) (dynamic.Interface, error) {
+						scheme := runtime.NewScheme()
+						_ = corev1.AddToScheme(scheme)
+						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(scheme,
+							map[schema.GroupVersionResource]string{
+								{Group: testResourceGroup, Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
+								{Group: "", Version: "v1", Resource: "Namespace"}:                                          "NamespaceList",
+							},
+							namespace1,
+						)
+						dynamicClient.PrependReactor("list", testResourceKindPlural, func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
+							return true, nil, errOp
+						})
+						return dynamicClient, nil
+					}
+				},
+			},
+			wantErr: true,
+			errMsg:  fmt.Sprintf("error listing resource %s: something happened", testResourceKindLowerCase),
+		},
+		{
+			name: "success - all namespaces",
+			args: args{
+				resourceKind:                  testResourceKindLowerCase,
+				namespace:                     testNamespace,
+				all:                           true,
+				getConfigFunc:                 okGetConfig,
+				getDiscoveryClientFuncFactory: okGetDiscoveryFuncFactory,
+				getDynamicClientFunc: func(objects ...runtime.Object) getDynamicClientFunc {
+					return func(_ *rest.Config) (dynamic.Interface, error) {
+						scheme := runtime.NewScheme()
+						_ = corev1.AddToScheme(scheme)
+						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(scheme,
+							map[schema.GroupVersionResource]string{
+								{Group: testResourceGroup, Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
+								{Group: "", Version: "v1", Resource: "namespaces"}:                                         "NamespaceList",
+							},
+							objects...,
+						)
+						return dynamicClient, nil
+					}
+				},
+				openFileFunc: defaultOpenFileFunc,
+			},
+			wantErr:    false,
+			listResult: []runtime.Object{obj1WithNamespace1, obj1WithNamespace2, namespace1, namespace2},
+			expected:   []*unstructured.Unstructured{obj1WithNamespace1AfterBackup, obj1WithNamespace2AfterBackup},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -380,7 +492,7 @@ func TestBackupResource(t *testing.T) {
 			if tt.args.getDynamicClientFunc != nil {
 				getDyamicClientFunc = tt.args.getDynamicClientFunc(tt.listResult...)
 			}
-			err = backupResource(tt.args.resourceKind, tt.args.namespace, testDir, false,
+			err = backupResource(tt.args.resourceKind, tt.args.namespace, testDir, false, tt.args.all,
 				tt.args.getConfigFunc, getDyamicClientFunc, getDicoveryClientFunc,
 				tt.args.openFileFunc)
 			if err != nil {
@@ -399,7 +511,7 @@ func TestBackupResource(t *testing.T) {
 							resourceName, testResourceKindLowerCase)
 					} else {
 						fileAbsolutPath = fmt.Sprintf(testDir+"/%s_%s_%s.yaml",
-							resourceName, testResourceKindLowerCase, testNamespace)
+							resourceName, testResourceKindLowerCase, expectedResource.GetNamespace())
 					}
 
 					assert.FileExists(t, fileAbsolutPath)
@@ -465,7 +577,7 @@ func TestBackupResource_WithArchive(t *testing.T) {
 			if tt.args.getDynamicClientFunc != nil {
 				getDyamicClientFunc = tt.args.getDynamicClientFunc(tt.listResult...)
 			}
-			err = backupResource(tt.args.resourceKind, tt.args.namespace, testDir, true,
+			err = backupResource(tt.args.resourceKind, tt.args.namespace, testDir, true, tt.args.all,
 				tt.args.getConfigFunc, getDyamicClientFunc, tt.args.getDiscoveryClientFuncFactory(tt.args.namespace != v1.NamespaceNone), tt.args.openFileFunc)
 			if err != nil {
 				if !tt.wantErr {
@@ -499,7 +611,6 @@ func TestBackupResource_WithArchive(t *testing.T) {
 						assert.NoError(t, err)
 						if expectedResourceName == actualResourceName {
 							assert.Equal(t, expectedResource.Object, actual)
-
 						}
 					}
 				}

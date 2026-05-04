@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"path"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -19,10 +22,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type getConfigFunc func() (*rest.Config, error)
-type getDynamicClientFunc func(*rest.Config) (dynamic.Interface, error)
-type getDiscoveryClientFunc func(*rest.Config) (discovery.DiscoveryInterface, error)
-type openFileFunc func(fileAbsolutePath string) (io.WriteCloser, error)
+type (
+	getConfigFunc          func() (*rest.Config, error)
+	getDynamicClientFunc   func(*rest.Config) (dynamic.Interface, error)
+	getDiscoveryClientFunc func(*rest.Config) (discovery.DiscoveryInterface, error)
+	openFileFunc           func(fileAbsolutePath string) (io.WriteCloser, error)
+)
 
 var defaultGetConfig getConfigFunc = func() (*rest.Config, error) {
 	return clientcmd.BuildConfigFromKubeconfigGetter("", clientcmd.NewDefaultClientConfigLoadingRules().Load)
@@ -38,16 +43,17 @@ var defaultGetDiscoveryClientFunc getDiscoveryClientFunc = func(config *rest.Con
 
 var defaultOpenFileFunc openFileFunc = func(fileAbsolutePath string) (io.WriteCloser, error) {
 	return os.OpenFile(fileAbsolutePath,
-		os.O_RDWR|os.O_CREATE, 0644)
+		os.O_RDWR|os.O_CREATE, 0o644)
 }
 
-func BackupResource(resourceKind, namespace, directory string, archive bool) error {
-	return backupResource(resourceKind, namespace, directory, archive, defaultGetConfig,
+func BackupResource(resourceKind, namespace, directory string, archive, all bool) error {
+	return backupResource(resourceKind, namespace, directory, archive, all, defaultGetConfig,
 		defaultGetDynamicClientFunc, defaultGetDiscoveryClientFunc, defaultOpenFileFunc)
 }
 
-func backupResource(resourceKind, namespace, directory string, archive bool, getConfigFunc getConfigFunc,
-	getDynamicClientFunc getDynamicClientFunc, getDiscoveryClient getDiscoveryClientFunc, openfileFunc openFileFunc) error {
+func backupResource(resourceKind, namespace, directory string, archive, all bool, getConfigFunc getConfigFunc,
+	getDynamicClientFunc getDynamicClientFunc, getDiscoveryClient getDiscoveryClientFunc, openfileFunc openFileFunc,
+) error {
 	config, err := getConfigFunc()
 	if err != nil {
 		return fmt.Errorf("error creating k8 client config: %w", err)
@@ -96,6 +102,9 @@ func backupResource(resourceKind, namespace, directory string, archive bool, get
 
 	if !namespaced {
 		namespace = v1.NamespaceNone
+		if all {
+			slog.Warn("all flag used with non-namespaced resource, the flag will have no effect.")
+		}
 	}
 
 	client, err := getDynamicClientFunc(config)
@@ -103,9 +112,30 @@ func backupResource(resourceKind, namespace, directory string, archive bool, get
 		return fmt.Errorf("error creating k8 client: %w", err)
 	}
 
-	resources, err := client.Resource(grv).Namespace(namespace).List(context.Background(), v1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
+	resources := &unstructured.UnstructuredList{}
+	if all && namespaced {
+		namespaces, err := client.Resource(schema.GroupVersionResource{
+			Group:    corev1.GroupName,
+			Version:  "v1",
+			Resource: "namespaces",
+		}).List(context.Background(), v1.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("error listing namespaces: %w", err)
+		}
+
+		for _, namespace := range namespaces.Items {
+			namespacedResources, err := client.Resource(grv).Namespace(namespace.GetName()).List(context.Background(), v1.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
+			}
+
+			resources.Items = append(resources.Items, namespacedResources.Items...)
+		}
+	} else {
+		resources, err = client.Resource(grv).Namespace(namespace).List(context.Background(), v1.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
+		}
 	}
 
 	var zipWriter *zip.Writer
@@ -145,7 +175,7 @@ func backupResource(resourceKind, namespace, directory string, archive bool, get
 
 		var fileName string
 		if namespaced {
-			fileName = fmt.Sprintf("%s_%s_%s.yaml", item.GetName(), resourceKind, namespace)
+			fileName = fmt.Sprintf("%s_%s_%s.yaml", item.GetName(), resourceKind, item.GetNamespace())
 		} else {
 			fileName = fmt.Sprintf("%s_%s.yaml", item.GetName(), resourceKind)
 		}
