@@ -13,9 +13,7 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -44,7 +42,7 @@ var defaultGetDiscoveryClientFunc getDiscoveryClientFunc = func(config *rest.Con
 
 var defaultOpenFileFunc openFileFunc = func(fileAbsolutePath string) (io.WriteCloser, error) {
 	return os.OpenFile(fileAbsolutePath,
-		os.O_RDWR|os.O_CREATE, 0o644)
+		os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 }
 
 func Do(resourceKind, namespace, directory string, archive, all bool) error {
@@ -107,6 +105,8 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 		if all {
 			slog.Warn("all flag used with non-namespaced resource, the flag will have no effect.")
 		}
+	} else if all {
+		namespace = v1.NamespaceAll
 	}
 
 	client, err := getDynamicClientFunc(config)
@@ -114,30 +114,9 @@ func backupResource(resourceKind, namespace, directory string, archive, all bool
 		return fmt.Errorf("error creating k8 client: %w", err)
 	}
 
-	resources := &unstructured.UnstructuredList{}
-	if all && namespaced {
-		namespaces, err := client.Resource(schema.GroupVersionResource{
-			Group:    corev1.GroupName,
-			Version:  "v1",
-			Resource: "namespaces",
-		}).List(context.Background(), v1.ListOptions{})
-		if err != nil {
-			return fmt.Errorf("error listing namespaces: %w", err)
-		}
-
-		for _, namespace := range namespaces.Items {
-			namespacedResources, err := client.Resource(grv).Namespace(namespace.GetName()).List(context.Background(), v1.ListOptions{})
-			if err != nil {
-				return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
-			}
-
-			resources.Items = append(resources.Items, namespacedResources.Items...)
-		}
-	} else {
-		resources, err = client.Resource(grv).Namespace(namespace).List(context.Background(), v1.ListOptions{})
-		if err != nil {
-			return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
-		}
+	resources, err := client.Resource(grv).Namespace(namespace).List(context.Background(), v1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("error listing resource %s: %w", resourceKind, err)
 	}
 
 	var zipWriter *zip.Writer

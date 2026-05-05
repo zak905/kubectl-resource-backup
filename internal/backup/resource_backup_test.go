@@ -135,7 +135,7 @@ var (
 						Group:   testResourceGroup,
 						Version: testResourceVersion, Resource: testResourceKindPlural,
 					}: testResourceKindList,
-					{Group: "", Version: "v1", Resource: "Namespace"}: "NamespaceList",
+					{Group: "", Version: "v1", Resource: "namespaces"}: "NamespaceList",
 				},
 				objects...,
 			)
@@ -391,32 +391,6 @@ func TestBackupResource(t *testing.T) {
 			expected:   []*unstructured.Unstructured{objAfterBackup, objAfterBackup2},
 		},
 		{
-			name: "error listing namespaces with all flag",
-			args: args{
-				resourceKind:                  testResourceKindLowerCase,
-				namespace:                     testNamespace,
-				all:                           true,
-				getConfigFunc:                 okGetConfig,
-				getDiscoveryClientFuncFactory: okGetDiscoveryFuncFactory,
-				getDynamicClientFunc: func(_ ...runtime.Object) getDynamicClientFunc {
-					return func(_ *rest.Config) (dynamic.Interface, error) {
-						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(scheme,
-							map[schema.GroupVersionResource]string{
-								{Group: testResourceGroup, Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
-								{Group: "", Version: "v1", Resource: "Namespace"}:                                          "NamespaceList",
-							},
-						)
-						dynamicClient.PrependReactor("*", "*", func(_ kubetesting.Action) (handled bool, ret runtime.Object, err error) {
-							return true, nil, errOp
-						})
-						return dynamicClient, nil
-					}
-				},
-			},
-			wantErr: true,
-			errMsg:  "error listing namespaces: something happened",
-		},
-		{
 			name: "error listing resources in namespace with all flag",
 			args: args{
 				resourceKind:                  testResourceKindLowerCase,
@@ -519,7 +493,6 @@ func TestBackupResource(t *testing.T) {
 					assert.NoError(t, err)
 					var actual map[string]interface{}
 					assert.NoError(t, yaml.Unmarshal(content, &actual))
-					fmt.Println(fileAbsolutPath)
 					assert.Equal(t, expectedResource.Object, actual)
 				}
 			}
