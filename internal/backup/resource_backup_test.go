@@ -403,7 +403,7 @@ func TestBackupResource(t *testing.T) {
 						dynamicClient := fakedynamic.NewSimpleDynamicClientWithCustomListKinds(scheme,
 							map[schema.GroupVersionResource]string{
 								{Group: testResourceGroup, Version: testResourceVersion, Resource: testResourceKindPlural}: testResourceKindList,
-								{Group: "", Version: "v1", Resource: "Namespace"}:                                          "NamespaceList",
+								{Group: "", Version: "v1", Resource: "namespaces"}:                                         "NamespaceList",
 							},
 							namespace1,
 						)
