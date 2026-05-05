@@ -188,16 +188,22 @@ status:                                                                         
 usage: kubectl resource-backup [<flags>] <kind>
 
 
-Flags:                                                                                                                                                                       
-      --[no-]help            Show context-sensitive help (also try --help-long and --help-man).
-  -n, --namespace="default"  if the resource is namespaced, this flag sets the namespace scope. This flag has no effect if the 'all' flag is used
+Flags:
+      --[no-]help            Show context-sensitive help (also try --help-long
+                             and --help-man).
+  -n, --namespace="default"  if the resource is namespaced, this flag sets the
+                             namespace scope. This flag has no effect if the
+                             'all' flag is used
       --dir="."              the directory where the resources will be saved
-      --[no-]zip             generates a zip archive containing the saved resources
-      --[no-]all             if the resource is namespaced, the plugin will go through all the namespaces
+      --[no-]zip             generates a zip archive containing the saved
+                             resources
+      --[no-]all             if the resource is namespaced, the plugin will go
+                             through all the namespaces
       --[no-]version         Show application version.
 
 Args:
-  <kind>  the Kubernetes resource kind to backup in lower case. e.g issuer, deployment, service...
+  <kind>  the Kubernetes resource kind to backup in lower case. e.g issuer,
+          deployment, service...
 
 ```
 
